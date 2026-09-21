@@ -1,0 +1,22 @@
+[
+  { "query": "帮我调查一下 foo/bar 这个项目的 pipeline 18372 为什么失败", "should_trigger": true },
+  { "query": "Why did pipeline #4821 in group/order-engine fail? Dig into the failed jobs and tell me what happened.", "should_trigger": true },
+  { "query": "看下 MR !873 的 integration test 为什么挂了", "should_trigger": true },
+  { "query": "昨晚这批 integration test 大量超时,帮我查查是不是测试环境的问题", "should_trigger": true },
+  { "query": "pipeline 18372 里 test_cancel_order 失败了,什么原因?", "should_trigger": true },
+  { "query": "The CI pipeline for my MR keeps failing. I need to know if it's my change or something in the test environment before I waste more time on it.", "should_trigger": true },
+  { "query": "这次 pipeline 挂了 60 多个测试,是一个原因导致的吗?帮我归类分析下", "should_trigger": true },
+  { "query": "test_checkout_flow 是 flaky 还是我的 MR 真的把它弄坏了?", "should_trigger": true },
+  { "query": "CI 又红了,job log 里一堆 connection timeout,我们 redis 是不是又出问题了?帮我查下", "should_trigger": true },
+  { "query": "接着刚才的调查,为什么你觉得不是这次 MR 引起的?", "should_trigger": true },
+  { "query": "帮我修一下这个失败的单元测试,断言写错了,改成正确的期望值", "should_trigger": false },
+  { "query": "Write integration tests for the new OrderService.create method, covering the insufficient-stock case.", "should_trigger": false },
+  { "query": "我本地跑 pytest 有一个用例过不了,帮我 debug 一下代码", "should_trigger": false },
+  { "query": "review 一下 .gitlab-ci.yml,帮我把 pipeline 跑快点,现在要 40 分钟", "should_trigger": false },
+  { "query": "Production is returning 500s, here's a stack trace from the app logs — what does it mean?", "should_trigger": false },
+  { "query": "帮我把 GitLab CI 的 runner 升级到 16.x,注意兼容性", "should_trigger": false },
+  { "query": "How do I set up a CI pipeline for this new repo with test and lint stages?", "should_trigger": false },
+  { "query": "kubectl 连不上集群了,证书好像过期了,怎么续?", "should_trigger": false },
+  { "query": "总结一下 MR !873 都改了什么,给我个 review 要点列表", "should_trigger": false },
+  { "query": "这个 flaky test 没人修,我们直接删掉吧,顺便把 skip 标记加上", "should_trigger": false }
+]
