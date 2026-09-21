@@ -11,200 +11,232 @@ description: >
 
 # Integration Test Investigation
 
-Investigate integration-test failures on remote GitLab projects: understand
-what failed, cluster related failures, gather evidence across code, runtime,
-and history, form and validate hypotheses, and report conclusions with explicit
-confidence — including UNKNOWN when the evidence runs out.
+Investigate integration-test failures on a remote GitLab project and report
+evidence-backed conclusions, including UNKNOWN when the evidence runs out.
+Use whatever Git-hosting, Kubernetes, code-search, log, and shell capabilities
+the host actually has — this skill never names tools. A missing capability is
+recorded as Missing Evidence; it never aborts the investigation.
 
-This skill is a methodology, not a tool chain. It never names a specific tool.
-Use whatever Git-hosting, Kubernetes, log, and code-search capabilities the
-host agent already has.
+## Hard rules
 
-## Operating principles
+Cross-phase invariants. Violations are detectable.
 
-1. **Read-only.** Investigation must not mutate the world: no test reruns, no
-   `kubectl exec/delete/edit`, no database writes, no label flips. Remediation
-   is proposed as next steps, never executed.
-2. **Observe before explaining.** Establish what actually failed (jobs, tests,
-   errors, timestamps) before looking for causes. Never jump from "the pipeline
-   is red" to a root cause.
-3. **Separate observation, hypothesis, and conclusion.** State each as such.
-   A suspicious log line is an observation; what it implies is a hypothesis
-   until validated.
-4. **One defect can fail a hundred tests.** Never assume each failed test is
-   an independent defect; look for the shared failure first.
-5. **Seek disconfirming evidence.** Before declaring a root cause, actively
-   look for evidence that contradicts it. Correlation in time is not causation.
-6. **UNKNOWN is a valid result.** Report what is known, what is ruled out, and
-   what evidence would settle it. Never manufacture certainty.
-7. **Remote-first.** Work against the remote GitLab project through available
-   capabilities. A local checkout is an optional accelerator (full-text search,
-   git history, cross-file navigation), never a precondition.
-8. **Don't re-ask what you already know.** Use every anchor the user provided
-   and fill gaps yourself. Ask the user only when the investigation is truly
-   blocked on information only they have.
-9. **Adaptive depth.** Choose investigation paths based on evidence, not rote.
-   Do not mechanically walk every path — but do not stop at the first
-   suspicious signal either; ask whether the evidence on the table actually
-   supports a root cause.
+1. **Read-only.** No test reruns, no `kubectl exec/delete/edit`, no database
+   writes, no label or config changes. Remediation is output as a recommended
+   next step, never executed.
+2. **Label every claim** as observation, hypothesis, or conclusion. Never
+   present an inference as an observation.
+3. **Absent evidence is not negative evidence.** Rotated-away logs, missing
+   reports, and empty search results are recorded as Missing Evidence — never
+   as "no errors found".
+4. **Confidence is HIGH / MEDIUM / LOW / UNKNOWN only.** Never numeric
+   probabilities.
+5. **Use every anchor the user gave.** Fill gaps yourself (step 1.2). Ask the
+   user only when blocked on information only they can supply.
 
-## Capabilities
-
-Discover what is available in this host and proceed with what exists: Git
-hosting (pipelines, jobs, MRs, commits, diffs, repository files), Kubernetes
-(workload status, events, logs), code search (local checkout or remote),
-shell, centralized logging. A missing capability becomes a Missing Evidence
-item in the report, not an abort.
-
-## Workflow
+## Flow
 
 ```
-Establish Context → Inspect Failures → Cluster Failures →
-Investigate → Form Hypotheses → Validate Hypotheses → Report
+1 ESTABLISH CONTEXT
+      ↓
+2 GET FAILURE DATA      ──E1: job died before tests ran──► 7 REPORT (job cause)
+      ↓
+3 CLUSTER               ──E2: single named test──► one cluster of one
+      ↓
+4 ROUTE EACH CLUSTER    (condition table → paths H / C / R / T)
+      ↓
+5 HYPOTHESES            (five mandatory fields per hypothesis)
+      ↓
+6 JUDGMENT POINT        ──fails──► back to 4 with the open question,
+      ↓                       or conclude UNKNOWN for that cluster
+7 REPORT                (template in references/investigation-report.md)
 ```
 
-The phases are a protocol, not a script: move forward as soon as you have
-enough to proceed, and revisit an earlier phase when new evidence demands it.
+**Early-exit gates fire only on direct evidence, never on a plausible story.**
 
-### 1. Establish Context
+- **E1 (after step 2):** the job failed before tests ran — image pull error,
+  OOMKill, runner failure, manual cancellation. Skip 3–6, investigate the job
+  itself, report.
+- **E2 (at step 3):** the user asked about one named test. It is a single
+  cluster of one; route it directly.
 
-Confirm what this investigation is anchored to: project, MR (if any),
-pipeline, failed jobs, commit, test suite, environment/namespace, approximate
-failure time, relevant services, and pipeline type (MR pipeline / branch
-pipeline / scheduled nightly — MR pipelines prioritize the MR's changes;
-nightly pipelines prioritize environment drift and dependency changes).
+## 1 Establish Context
 
-Anchor resolution heuristics:
+1.1 List the anchors the user gave: project, MR, pipeline, job, commit, test,
+suite, namespace, pod, time range, error text, free description.
 
-- MR only → its head pipeline
-- Commit only → pipelines containing that commit (usually branch pipelines)
-- Test name only → search that test across recent pipelines in the relevant
-  time window
-- Time window or symptoms only → recent failed pipelines in that window
-- Pod / namespace only → map back to the project and its recent pipelines
+1.2 Resolve missing anchors:
 
-Missing context must not block the investigation. Proceed as soon as you can
-locate the pipeline, job, or failure.
+| You only have | Resolve via |
+| --- | --- |
+| MR | its head pipeline |
+| Commit | pipelines containing it (usually branch pipelines) |
+| Test name | that test across recent pipelines in the time window |
+| Time window / symptoms | recent failed pipelines in that window |
+| Pod / namespace | the owning project and its recent pipelines |
 
-### 2. Inspect Failures
+1.3 Record: project, MR, pipeline, **pipeline type** (MR / branch / nightly),
+failed jobs, commit, environment, failure window, services involved.
 
-Get structured failure data before reasoning about causes. Follow the priority
-chain and per-source reading rules in
-[references/failure-data-sources.md](references/failure-data-sources.md):
-test report → job artifacts → job-trace parsing.
+1.4 Routing prior by pipeline type — MR pipeline: code-change path first;
+nightly: runtime and dependency paths first.
 
-Record per failure: error message, exception, stack trace, failure timestamp,
-setup/fixture vs assertion failure, timeout vs error vs dependency failure.
-Distinguish test-level failures from job-level failures — if the job died
-before running tests (image pull, OOMKill, runner error), there is no test
-failure to analyze; investigate the job itself.
+1.5 Proceed as soon as the pipeline, job, or failure is located. Missing
+context is not a blocker.
 
-If structured data is unavailable, say so explicitly and degrade honestly. A
-data-access blocker is itself a finding, not a reason to guess.
+## 2 Get Failure Data
 
-### 3. Cluster Failures
+2.1 Try sources in this order; stop at the first with case-level detail.
+Per-source reading rules:
+[references/failure-data-sources.md](references/failure-data-sources.md).
 
-Guard the context window: never paste the full failure list before clustering.
-Pre-aggregate by error signature / exception / suite into counts and
-distributions; pick one representative failure per cluster for deep
-investigation; page through the full list only to check coverage.
+| Order | Source | Yields |
+| --- | --- | --- |
+| 1 | Pipeline / job test report | per-case status, error, stack, duration |
+| 2 | Job artifacts (JUnit XML, Allure, HTML) | the same, from files |
+| 3 | Job trace parsing | summary block first, then per-test error blocks |
 
-Clustering dimensions: same or similar error message, same exception, same
-stack frame, same dependency, endpoint, fixture, or setup failure, close
-failure timestamps, same service, same runtime error. Appearing in the same
-pipeline is **not** a clustering reason by itself.
+2.2 Record per failure: error message, exception, stack trace,
+setup/fixture vs assertion failure, timeout vs error vs dependency error, and
+the **failure window** `[completion − duration, completion]` — report
+timestamps are completion times, not occurrence times.
 
-The goal is to turn "100 failed tests" into "Cluster A — 72, Cluster B — 21,
-Cluster C — 7" and investigate representatives, not every test.
+2.3 No source yields case-level data → the blocker itself is a finding:
+record what was tried, what would unblock it, and degrade honestly. Do not
+guess.
 
-### 4. Investigate
+## 3 Cluster
 
-Four directions. Choose by evidence, not by rote.
+One defect can fail a hundred tests. Cluster before investigating
+individuals.
 
-**Test investigation** — test implementation, fixtures, setup and cleanup,
-test assumptions, test data, assertions, timing dependencies. Question: is the
-failure consistent with a defect in the test itself?
+3.1 Aggregate before reading: group by error signature / exception / suite
+into counts and distributions. Never paste the full failure list into context
+before this step.
 
-**Code-change investigation** — MR/commit diff, changed modules, touched
-execution paths, configuration and dependency changes. Question: *can* this
-change explain the observed failure? A file being modified in the MR is a
-lead, not a verdict.
+3.2 Cluster on: same or similar error message · same exception · same stack
+frame · same dependency / endpoint / fixture / setup failure · close failure
+windows · same service / runtime error. **Appearing in the same pipeline is
+not clustering grounds.**
 
-**Runtime investigation** — workload and pod status, restarts, events,
-application and dependency logs, deployment status, version mismatches,
-resource anomalies — scoped to the failure time window. Look for a reliable
-time-and-cause link between failure and runtime event. Respect the
-log-retention and time-precision rules in
-[references/failure-data-sources.md](references/failure-data-sources.md):
-test-report timestamps are completion times; allow minute-scale slack; if
-logs have rotated away, record Missing Evidence rather than concluding "no
-errors found".
+3.3 One representative per cluster goes to deep investigation; consult the
+full list only to check coverage.
 
-**Historical investigation** — first action, cheapest and most decisive: *did
-the same test on the same commit pass in another pipeline or in a retry?*
-Passing → strong evidence against a code regression (points to flaky /
-environment / dependency). Failing further back in history → the problem
-predates this change. Then: previous pipelines, historical failures, related
-MRs and issues, known problems.
+3.4 Output the reduction: `N failed tests → A (n₁) · B (n₂) · C (n₃)`.
 
-### 5. Form Hypotheses
+## 4 Route Each Cluster
 
-For each cluster, form at most a few main hypotheses. Each hypothesis states:
-proposed cause, supporting evidence, missing evidence, potential
-contradiction, and what evidence would disprove it. Distinguish the cluster's
-*observed failure* from *why it failed* — the hypothesis is only the latter.
+Cheapest decisive signal first. Run only the paths whose condition fires. A
+cluster whose cause is already established by direct evidence runs no further
+paths.
 
-### 6. Validate Hypotheses
+| IF (observable) | THEN route to |
+| --- | --- |
+| Same test, same commit passed in another pipeline or retry | Not a regression → quick discriminators in [failure-classification.md](references/failure-classification.md) |
+| Failures cross suites/services and align with an infra event window | R Runtime |
+| Error signature names a dependency (refused / reset / timeout to X) | R Runtime, dependency first |
+| One test fails deterministically only in this MR's pipeline | C Code change |
+| Failure references specific records / IDs or depends on execution order | T Test (data / state) |
+| Deployed version or config differs from the pipeline's commit | R Runtime (version / config) |
+| Nothing fires | H first, then per the pipeline-type prior (1.4) |
 
-Before naming a root cause: (1) gather supporting evidence, (2) actively look
-for counter-evidence, (3) compare against alternative hypotheses, (4) separate
-correlation from causation, (5) judge whether the evidence suffices. Declaring
-a root cause off a single suspicious log line is forbidden. If validation
-fails or evidence is insufficient, keep the uncertainty explicit.
+Each path fixes the question and the exit condition. How you search is free.
 
-Classify each cluster using the definitions and discriminators in
-[references/failure-classification.md](references/failure-classification.md):
-Application Regression / Test Defect / Flaky Test / Environment or
-Infrastructure Issue / Dependency Failure / Test Data or State Issue /
-Configuration or Version Mismatch / Unknown. Assign confidence HIGH / MEDIUM /
-LOW — never pseudo-precise percentages.
+**H — Historical (API-only, cheapest)**
+Question: has this failure been seen before, and does the same code pass
+elsewhere?
+- H1: same test on same commit elsewhere — passed ⇒ record "not a
+  regression" and route per the discriminators; failed further back in
+  history ⇒ the problem predates this change.
+- H2: search previous pipelines, MRs, and issues for the error signature.
+Exit: history stated with pointers, or "no history found" recorded.
 
-### 7. Report
+**C — Code change**
+Question: can this diff explain **this exact observed error** through a named
+execution path (diff → path → error)?
+Exit: the named path, or "no plausible path" recorded as evidence against
+regression. A file modified in the MR is a lead until the path is named —
+never a cause by itself. How to read and search the code is free (a local
+checkout, if present, is an accelerator, never a requirement).
+
+**R — Runtime**
+Question: is there a runtime event inside the failure window with a reliable
+time-and-cause link to the failures?
+Exit: event + window correlation + causal mechanism, or "no correlation"
+recorded. Gotchas: pod restarts wipe `kubectl logs` → Missing Evidence, fall
+back to events / centralized logs / artifacts; allow minute-scale slack when
+aligning windows (a 40-second mismatch proves nothing); CI-runner and cluster
+clocks are not synchronized.
+
+**T — Test**
+Question: is the failure consistent with a defect in the test itself —
+assertion, fixture, assumption, test data, timing dependence?
+Exit: the specific defect named, or "not consistent with a test defect".
+
+## 5 Hypotheses
+
+Per cluster, at most a few main hypotheses. All five fields are mandatory —
+a field you cannot fill means the hypothesis is too vague: rewrite it before
+proceeding.
+
+```
+Hypothesis:           <proposed cause>
+Supporting evidence:  <observations, labeled as such>
+Missing evidence:     <what is not yet known>
+Contradiction risk:   <what could refute it>
+Disproof observation: <one observation that would differ if this were false>
+```
+
+## 6 Judgment Point: Validate
+
+The weighing is judgment; the outputs are mandatory. Freedom lives here and
+only here.
+
+- [ ] The disproof observation from step 5 is **named and actually checked**.
+      If none can be named, confidence for that cluster is capped at LOW.
+- [ ] Counter-evidence was actively searched — state where you looked;
+      "none found" without a search does not count.
+- [ ] Alternatives were compared — state why the main hypothesis wins.
+- [ ] Time overlap is distinguished from causation — name the mechanism, not
+      just the window overlap.
+
+All pass → classify per
+[failure-classification.md](references/failure-classification.md) and set
+confidence by its HIGH / MEDIUM / LOW definitions. Any fail → back to step 4
+with the open question, or conclude UNKNOWN for that cluster.
+
+## 7 Report
 
 Produce the report per
 [references/investigation-report.md](references/investigation-report.md):
-summary header, one section per cluster (observed failure, classification,
-likely cause, supporting and contradicting evidence, confidence, recommended
-next step) — or the UNKNOWN layout when the root cause is not established.
-Write the report in the user's language. Next steps must be concretely
-actionable (targets, time windows, test names), never "check the logs".
+summary header, one section per cluster, UNKNOWN layout wherever the root
+cause is not established. Next steps must name targets, time windows, and
+test names — never "check the logs". Write in the user's language.
 
 ## Follow-up investigations
 
-This skill supports continuing an investigation, not just emitting one
-report. Maintain a compact **Investigation State** as the conversation
-progresses:
+Maintain this state and update it at every phase boundary:
 
 ```
 INVESTIGATION STATE
 Context:     <project, pipeline/MR, commit, environment, failure window>
-Clusters:    <id, signature, count, representative test>
+Clusters:    <id, signature, count, representative>
 Hypotheses:  <id, cluster, status: active|confirmed|refuted, key evidence>
-Ruled out:   <what was ruled out, on what evidence>
-Open items:  <missing evidence, suggested next checks>
+Ruled out:   <what, on what evidence>
+Open items:  <missing evidence, next checks>
 ```
 
-Update it as evidence lands. When the user asks a follow-up ("why do you think
-it's not MR !832?"), first re-anchor on this state, then gather the specific
-new evidence the question demands — do not restart the investigation.
-Conclusions are allowed to change as evidence arrives; state explicitly what
-changed and why.
+A follow-up question ("why do you think it's not MR !832?") re-anchors on
+this state first, then gathers only the new evidence it demands — it never
+restarts the investigation. Conclusions may change on new evidence; state
+what changed and why.
 
 ## References
 
-- [failure-data-sources.md](references/failure-data-sources.md) — where
-  failure data comes from, in what order, and how to read each source
-- [failure-classification.md](references/failure-classification.md) — category
-  definitions and how to tell the confusable ones apart
+- [failure-data-sources.md](references/failure-data-sources.md) — per-source
+  reading rules: test reports, artifacts, trace parsing, log retention, time
+  precision
+- [failure-classification.md](references/failure-classification.md) —
+  category definitions and quick discriminators
 - [investigation-report.md](references/investigation-report.md) — report
   templates, evidence-citation norms, next-step writing rules
