@@ -30,10 +30,15 @@ format and validator explicitly support that difference.
 The bundled auditor compares ICU message structure between source and target:
 argument names, selector type (plural/select/selectordinal), custom option
 names, the presence of the `other` fallback, and the presence of `#` in plural
-messages. CLDR branch categories such as `one`, `two`, and `few` may legitimately
-differ by locale and are not compared. The auditor still does not validate
-nested ICU grammar — run the project's ICU or message-format compiler before
-declaring reconciliation complete.
+messages. Options are recognized only at branch boundaries (after the message
+header or after a sibling branch closes), so ordinary body text such as
+`Error, see {link}` never counts as an option. Nested placeholders inside a
+branch body (like `{link}` itself) are surfaced as review items for agent
+classification rather than compared mechanically. CLDR branch categories such
+as `one`, `two`, and `few` may legitimately differ by locale and are not
+compared. The auditor still does not validate nested ICU grammar — run the
+project's ICU or message-format compiler before declaring reconciliation
+complete.
 
 ## Markup
 

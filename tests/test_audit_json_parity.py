@@ -330,6 +330,92 @@ class AuditJsonParityTest(unittest.TestCase):
         )
         self.assertIn("He", finding["fragments"])
 
+    def test_icu_body_text_and_nested_placeholders_are_not_options(self) -> None:
+        cases = {
+            # body word before a nested placeholder, translated
+            "word before placeholder": (
+                "{count, plural, other {Click {here} to continue}}",
+                "{count, plural, other {点击 {here} 继续}}",
+            ),
+            # comma + word + placeholder pattern inside the branch body
+            "comma word placeholder": (
+                "{count, plural, other {Error, see {link} for details}}",
+                "{count, plural, other {错误，详见 {link}}}",
+            ),
+            # body word right after a comma, translated
+            "body word after comma": (
+                "{count, plural, other {press, Enter {ok}}}",
+                "{count, plural, other {按下, 回车 {好}}}",
+            ),
+            # ICU quote-escaped literal brace
+            "quote escaped brace": (
+                "{count, plural, other {Use '{' to open}}",
+                "{count, plural, other {用 '{' 打开}}",
+            ),
+            # offset modifier is not an option
+            "offset modifier": (
+                "{count, plural, offset:1 one {# item} other {# items}}",
+                "{count, plural, offset:1 other {# 个项目}}",
+            ),
+        }
+        for name, (source_value, target_value) in cases.items():
+            with self.subTest(name=name):
+                completed = self.run_audit(
+                    json.dumps({"message": source_value}),
+                    json.dumps({"message": target_value}, ensure_ascii=False),
+                )
+                report = json.loads(completed.stdout)
+                self.assertEqual(
+                    report["summary"]["errors"], 0, completed.stdout
+                )
+                # Nested placeholders inside branch bodies surface for agent
+                # classification instead of failing mechanically.
+                self.assertNotEqual(completed.returncode, 1)
+
+    def test_icu_select_option_added_in_target_must_fail(self) -> None:
+        completed = self.run_audit(
+            json.dumps(
+                {"message": "{gender, select, female {She} other {They}}"}
+            ),
+            json.dumps(
+                {
+                    "message": (
+                        "{gender, select, male {他} female {她} other {TA}}"
+                    )
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+        self.assertEqual(completed.returncode, 1)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["errors"]
+            if item["kind"] == "protected_token_mismatch"
+        )
+        self.assertIn("icu_option:male", finding["extra"])
+
+    def test_untranslated_icu_body_word_requires_review(self) -> None:
+        completed = self.run_audit(
+            json.dumps(
+                {"message": "{count, plural, other {Click {here} to continue}}"}
+            ),
+            json.dumps(
+                {"message": "{count, plural, other {Click {here} 继续}}"},
+                ensure_ascii=False,
+            ),
+        )
+
+        self.assertEqual(completed.returncode, 3)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["reviews"]
+            if item["kind"] == "unprotected_english"
+        )
+        self.assertIn("Click", finding["fragments"])
+
     def test_text_report_lists_aggregated_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)

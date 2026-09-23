@@ -102,7 +102,6 @@ ICU_MESSAGE_RE = re.compile(
 ICU_CONTROL_RE = re.compile(
     r"\b(?:plural|select|selectordinal|offset|zero|one|two|few|many|other)\b"
 )
-ICU_SELECTOR_RE = re.compile(r"(?<![\w.-])([A-Za-z_][\w.-]*)\s*(?=\{)")
 ICU_CLDR_KEYWORDS = frozenset(
     {"offset", "zero", "one", "two", "few", "many", "other"}
 )
@@ -135,19 +134,84 @@ def icu_message_spans(value: str) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     for match in ICU_MESSAGE_RE.finditer(value):
         depth = 0
-        for index in range(match.start(), len(value)):
+        index = match.start()
+        closed = -1
+        while index < len(value):
             character = value[index]
+            if character == "'":
+                # ICU quote escape ('{ or ''): skip the escaped character.
+                index += 2
+                continue
             if character == "{":
                 depth += 1
             elif character == "}":
                 depth -= 1
                 if depth == 0:
-                    spans.append((match.start(), index + 1))
+                    closed = index
                     break
-        else:
-            # Unbalanced message: treat the remainder as inside the message.
-            spans.append((match.start(), len(value)))
+            index += 1
+        end = closed + 1 if closed >= 0 else len(value)
+        spans.append((match.start(), end))
     return spans
+
+
+def icu_branch_options(
+    value: str, spans: list[tuple[int, int]]
+) -> list[tuple[str, int, int]]:
+    """Collect branch option names at the direct child level of ICU messages.
+
+    Only words at a branch boundary — right after the message header or after
+    a sibling branch body closes — are options. A body-text word before a
+    nested placeholder (`Error, see {link}`) never qualifies.
+    """
+
+    options: list[tuple[str, int, int]] = []
+    span_by_start = {start: (start, end) for start, end in spans}
+    for message in ICU_MESSAGE_RE.finditer(value):
+        span = span_by_start.get(message.start())
+        if span is None:
+            continue
+        index, end = message.end(), span[1]
+        while index < end:
+            character = value[index]
+            if character in " \t\r\n":
+                index += 1
+                continue
+            if character == "}":
+                break
+            word_match = re.match(r"[A-Za-z_][\w.-]*", value[index:end])
+            if word_match is None:
+                break
+            word_start = index
+            word = word_match.group(0)
+            index += word_match.end()
+            while index < end and value[index] in " \t\r\n":
+                index += 1
+            if word == "offset" and index < end and value[index] == ":":
+                index += 1
+                while index < end and value[index] in " \t\r\n":
+                    index += 1
+                number = re.match(r"[+-]?\d+", value[index:end])
+                if number is None:
+                    break
+                index += number.end()
+                continue
+            if index >= end or value[index] != "{":
+                break
+            options.append((word, word_start, word_start + len(word)))
+            index += 1
+            depth = 1
+            while index < end and depth > 0:
+                character = value[index]
+                if character == "'":
+                    index += 2
+                    continue
+                if character == "{":
+                    depth += 1
+                elif character == "}":
+                    depth -= 1
+                index += 1
+    return options
 
 
 def mask_protected_content(value: str) -> tuple[str, list[dict[str, str]]]:
@@ -177,25 +241,31 @@ def mask_protected_content(value: str) -> tuple[str, list[dict[str, str]]]:
     collect(MARKDOWN_DESTINATION_RE, "PATH_OR_ADDRESS", "syntax", group=1)
 
     icu_spans = icu_message_spans(coverage_text)
+    icu_header_spans = [
+        match.span() for match in ICU_MESSAGE_RE.finditer(coverage_text)
+    ]
+
+    def within(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
+        return any(s <= start and end <= e for s, e in spans)
 
     for match in TOKEN_RE.finditer(coverage_text):
         start, end = match.span(0)
-        if (
-            match.lastgroup == "brace"
-            and end < len(coverage_text)
-            and coverage_text[end] == "}"
-            and any(s <= start and end <= e for s, e in icu_spans)
-        ):
-            # Inside an ICU message body a bare {word} is branch text, not a
-            # placeholder; leave it visible for English-residue detection.
-            continue
+        if match.lastgroup == "brace" and within(start, end, icu_spans):
+            if not within(start, end, icu_header_spans):
+                # Inside an ICU message body a bare {word} is branch text,
+                # not a placeholder; leave it visible for residue detection.
+                # Message-head arguments are protected as RUNTIME_TOKEN.
+                continue
         candidates.append(
             (start, end, "RUNTIME_TOKEN", match.group(0), "syntax", "")
         )
 
     if ICU_MESSAGE_RE.search(coverage_text):
         collect(ICU_CONTROL_RE, "RUNTIME_TOKEN", "syntax")
-        collect(ICU_SELECTOR_RE, "RUNTIME_TOKEN", "syntax", group=1)
+        for word, start, end in icu_branch_options(coverage_text, icu_spans):
+            candidates.append(
+                (start, end, "RUNTIME_TOKEN", word, "syntax", "")
+            )
 
     masked = list(coverage_text)
     protected: list[dict[str, str]] = []
@@ -222,19 +292,13 @@ def extract_tokens(value: str) -> Counter[str]:
         kind = match.lastgroup or "token"
         raw = match.group(0)
         if kind == "brace":
+            start, end = match.span(0)
+            if any(s <= start and end <= e for s, e in icu_spans):
+                # Inside an ICU message the head argument is compared as
+                # icu_arg and body text words are not placeholders at all.
+                continue
             name_match = re.match(r"\{\s*([A-Za-z_][\w.-]*)", raw)
             assert name_match is not None
-            inside_icu = any(
-                s <= match.start() and match.end() <= e for s, e in icu_spans
-            )
-            if (
-                inside_icu
-                and match.end() < len(value)
-                and value[match.end()] == "}"
-            ):
-                # Bare {word} inside an ICU message body is branch text, not
-                # an argument; the message head is compared as icu_arg.
-                continue
             raw = name_match.group(1)
         tokens[f"{kind}:{raw}"] += 1
     exact_patterns = (
@@ -294,8 +358,7 @@ def extract_tokens(value: str) -> Counter[str]:
             tokens[f"icu_arg:{match.group('arg')}"] += 1
             tokens[f"icu_selector:{match.group('kind')}"] += 1
             has_plural = has_plural or match.group("kind") == "plural"
-        for match in ICU_SELECTOR_RE.finditer(value):
-            name = match.group(1)
+        for name, _start, _end in icu_branch_options(value, icu_spans):
             if name == "other":
                 has_fallback = True
             if name not in ICU_CLDR_KEYWORDS:
