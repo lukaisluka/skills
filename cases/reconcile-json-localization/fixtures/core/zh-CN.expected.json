@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "signIn": "使用 GitHub 登录以继续。",
+    "account": "连接你的账户，然后选择一个工作区。",
+    "retry": "请重试。",
+    "docs": "阅读文档：https://example.com/guide",
+    "welcome": "欢迎回来。"
+  },
+  "cli": {
+    "install": "运行 `npm install` 以继续。"
+  },
+  "existing": {
+    "stable": "设置已保存。",
+    "mixed": "连接你的 GitHub 账户",
+    "stale": "永久删除此工作区。"
+  }
+}

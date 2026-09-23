@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "signIn": "Sign in with GitHub to continue.",
+    "account": "Connect your account. Then choose a workspace.",
+    "retry": "Please try again.",
+    "docs": "Read docs: https://example.com/guide",
+    "welcome": "Welcome back."
+  },
+  "cli": {
+    "install": "Run `npm install` to continue."
+  },
+  "existing": {
+    "stable": "Settings saved.",
+    "mixed": "Connect your GitHub account",
+    "stale": "Delete this workspace permanently."
+  }
+}

@@ -1,0 +1,22 @@
+[
+  { "query": "对账一下 locales/en.json 和 locales/zh-CN.json，让中文版和英文版完全一致", "should_trigger": true },
+  { "query": "英文 locale 最近改过了，reconcile 一下中文 JSON，缺的补上、过期的删掉", "should_trigger": true },
+  { "query": "Compare i18n/en.json with i18n/zh.json and bring the Chinese localization into full parity, including placeholders.", "should_trigger": true },
+  { "query": "检查 zh-CN.json 有没有漏 key、旧翻译或者英文已经删除但中文还保留的字段", "should_trigger": true },
+  { "query": "Our Chinese locale loads, but I don't trust that it still matches en-US.json. Do a complete reconciliation rather than only checking the latest diff.", "should_trigger": true },
+  { "query": "把 messages.zh-CN.json 的结构、数组顺序和变量占位符都跟 messages.en.json 对齐，再检查翻译含义", "should_trigger": true },
+  { "query": "中文 JSON 新增的 key 已经有了，但有些 value 还是英文或只翻了一半，拿英文 source 全量对账并补齐", "should_trigger": true },
+  { "query": "Reconcile these English and Chinese JSON locale files and report anything that cannot be translated safely.", "should_trigger": true },
+  { "query": "en.json 和 zh.json key 数量一样，但我怀疑嵌套类型和 ICU 参数不一致，完整检查并修复", "should_trigger": true },
+  { "query": "帮我确认当前中文 locale 已经准确覆盖当前英文 locale，不要依赖 git diff", "should_trigger": true },
+  { "query": "把这句英文翻译成中文：Your payment was declined.", "should_trigger": false },
+  { "query": "给这个 React 应用接入 i18next，并做一个语言切换器", "should_trigger": false },
+  { "query": "Can you compare these two arbitrary JSON configuration files and show the structural diff?", "should_trigger": false },
+  { "query": "审校一下这篇中文博客，看看表达是否自然", "should_trigger": false },
+  { "query": "把 locales/en.json 转换成 YAML 格式", "should_trigger": false },
+  { "query": "给产品增加法语、德语和日语支持，顺便设计 locale fallback", "should_trigger": false },
+  { "query": "解释 ICU MessageFormat 的 plural 语法，并给几个例子", "should_trigger": false },
+  { "query": "只检查 zh-CN.json 是否是合法 JSON，不需要和英文比较", "should_trigger": false },
+  { "query": "把英文 README 全文翻译成一个新的中文 Markdown 文件", "should_trigger": false },
+  { "query": "我们的中文语言包已经对齐了，帮我统一润色成更活泼的营销语气", "should_trigger": false }
+]
