@@ -27,8 +27,12 @@ Keep explicit selectors and required fallback branches such as `other`.
 Locale-specific plural branches may differ only when the project's message
 format and validator explicitly support that difference.
 
-The bundled auditor extracts common argument names but does not parse balanced
-nested ICU syntax. Run the project's ICU or message-format compiler before
+The bundled auditor compares ICU message structure between source and target:
+argument names, selector type (plural/select/selectordinal), custom option
+names, the presence of the `other` fallback, and the presence of `#` in plural
+messages. CLDR branch categories such as `one`, `two`, and `few` may legitimately
+differ by locale and are not compared. The auditor still does not validate
+nested ICU grammar — run the project's ICU or message-format compiler before
 declaring reconciliation complete.
 
 ## Markup

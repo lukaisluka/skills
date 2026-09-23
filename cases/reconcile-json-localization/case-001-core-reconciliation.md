@@ -1,5 +1,8 @@
 # Case 001: core reconciliation
 
+Synthetic seed case (deterministic regression baseline, not a real-usage
+backfill). Covers PRD §8 scenarios 1, 4, 5, 6, 7, and 11.
+
 ## Prompt
 
 Reconcile `fixtures/core/zh-CN.before.json` against

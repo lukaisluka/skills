@@ -27,7 +27,8 @@ existing style.
 For every source object:
 
 1. Add keys absent from the target at the same relative position.
-2. Remove target-only keys unless the user explicitly excludes them from scope.
+2. Remove target-only keys unless an explicit documented exemption exists (see
+   the hard rules in SKILL.md).
 3. Recurse into shared keys.
 4. Reorder the final target keys to match the source.
 

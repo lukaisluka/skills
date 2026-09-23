@@ -161,7 +161,10 @@ Chinese target JSON
 - array length 与逐元素结构；
 - 非字符串 scalar value；
 - 空翻译；
-- 常见 placeholder、HTML tag、Markdown destination、换行和 tab；
+- 常见 placeholder 的 source-target 精确对比，以及 URL、path、inline code、email、CLI flag、version、Markdown destination 的精确一致性；
+- HTML tag 顺序、自闭合形态与全部非翻译属性的 name=value 对比；
+- ICU 消息结构对比：参数名、selector 类型（plural/select/selectordinal）、自定义选项集合、`other` fallback 存在性与 plural `#` 占位存在性；CLDR 分支类别（one/two/few/…）允许 locale 合法差异；
+- 换行和 tab；
 - source 与 target 相同且仍含英文自然语言；
 - 与 source 不同但仍为全英文的 target；
 - 中英文混合 value 中未保护的英文残留；
@@ -200,7 +203,7 @@ Chinese target JSON
 - 仅语法验证；
 - Markdown 文档翻译。
 
-输出质量 case 从真实 reconciliation 前向积累，使用 `case-template.md`。第一批应覆盖：
+输出质量 case 分两类：**合成 seed case**（确定性回归基线，prompt + fixtures + 断言的简化结构，如 `case-001`）与**真实回填 case**（真实 reconciliation 结案后按 `case-template.md` 完整记录）。第一批 seed case 应覆盖：
 
 1. missing / extra key 与顺序差异；
 2. nested type 和 array shape；

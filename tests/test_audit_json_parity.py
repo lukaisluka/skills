@@ -251,6 +251,117 @@ class AuditJsonParityTest(unittest.TestCase):
         kinds = {finding["kind"] for finding in report["errors"]}
         self.assertIn("protected_token_mismatch", kinds)
 
+    def test_icu_structure_must_match(self) -> None:
+        cases = {
+            "selector type": (
+                "{count, plural, other {# items}}",
+                "{count, select, other {# 个项目}}",
+            ),
+            "number sign": (
+                "{count, plural, other {# items}}",
+                "{count, plural, other {个项目}}",
+            ),
+            "other fallback": (
+                "{count, plural, other {# items}}",
+                "{count, plural, one {# 个项目}}",
+            ),
+            "select option": (
+                "{gender, select, male {He} female {She} other {They}}",
+                "{gender, select, female {她} other {TA}}",
+            ),
+            "argument name": (
+                "{count, plural, other {# items}}",
+                "{num, plural, other {# 个项目}}",
+            ),
+        }
+        for name, (source_value, target_value) in cases.items():
+            with self.subTest(name=name):
+                completed = self.run_audit(
+                    json.dumps({"message": source_value}),
+                    json.dumps({"message": target_value}, ensure_ascii=False),
+                )
+                self.assertEqual(completed.returncode, 1, completed.stdout)
+                report = json.loads(completed.stdout)
+                kinds = {finding["kind"] for finding in report["errors"]}
+                self.assertIn("protected_token_mismatch", kinds)
+
+    def test_icu_locale_branch_reduction_is_allowed(self) -> None:
+        cases = {
+            "dropped one branch": (
+                "{count, plural, one {# item} other {# items}}",
+                "{count, plural, other {# 个项目}}",
+            ),
+            "identical structure": (
+                "{count, plural, other {# items}}",
+                "{count, plural, other {# 个项目}}",
+            ),
+            "nested select kept": (
+                "{n, plural, other {{g, select, male {He} other {They}}}}",
+                "{n, plural, other {{g, select, male {他} other {他们}}}}",
+            ),
+        }
+        for name, (source_value, target_value) in cases.items():
+            with self.subTest(name=name):
+                completed = self.run_audit(
+                    json.dumps({"message": source_value}),
+                    json.dumps({"message": target_value}, ensure_ascii=False),
+                )
+                self.assertEqual(completed.returncode, 0, completed.stdout)
+                report = json.loads(completed.stdout)
+                self.assertEqual(report["status"], "mechanical_parity")
+
+    def test_untranslated_icu_branch_text_requires_review(self) -> None:
+        completed = self.run_audit(
+            json.dumps(
+                {"message": "{n, plural, other {{g, select, male {He} other {They}}}}"}
+            ),
+            json.dumps(
+                {"message": "{n, plural, other {{g, select, male {He} other {TA}}}}"},
+                ensure_ascii=False,
+            ),
+        )
+
+        self.assertEqual(completed.returncode, 3)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["reviews"]
+            if item["kind"] == "english_only_target"
+        )
+        self.assertIn("He", finding["fragments"])
+
+    def test_text_report_lists_aggregated_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            source = directory / "en.json"
+            target = directory / "zh-CN.json"
+            source.write_text(
+                json.dumps({"a": "Please try again.", "b": "Please try again."}),
+                encoding="utf-8",
+            )
+            target.write_text(
+                json.dumps(
+                    {"a": "Please try again.", "b": "Please try again."}
+                ),
+                encoding="utf-8",
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    str(source),
+                    str(target),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(completed.returncode, 3)
+        self.assertIn(
+            "REVIEW untranslated_identical 2 path(s): /a /b", completed.stdout
+        )
+
     def test_identical_findings_are_aggregated_by_path(self) -> None:
         completed = self.run_audit(
             json.dumps(

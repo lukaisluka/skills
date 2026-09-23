@@ -97,12 +97,15 @@ PATH_RE = re.compile(r"(?<![\w.])(?:\.{0,2}/|/)[A-Za-z0-9._~!$&'()*+,;=:@%/-]+")
 CLI_FLAG_RE = re.compile(r"(?<![\w-])--?[A-Za-z][A-Za-z0-9-]*\b")
 VERSION_RE = re.compile(r"\bv?\d+(?:\.\d+){1,}(?:[-+][A-Za-z0-9.-]+)?\b")
 ICU_MESSAGE_RE = re.compile(
-    r"\{\s*[A-Za-z_][\w.-]*\s*,\s*(?:plural|select|selectordinal)\s*,"
+    r"\{\s*(?P<arg>[A-Za-z_][\w.-]*)\s*,\s*(?P<kind>plural|select|selectordinal)\s*,"
 )
 ICU_CONTROL_RE = re.compile(
     r"\b(?:plural|select|selectordinal|offset|zero|one|two|few|many|other)\b"
 )
 ICU_SELECTOR_RE = re.compile(r"(?<![\w.-])([A-Za-z_][\w.-]*)\s*(?=\{)")
+ICU_CLDR_KEYWORDS = frozenset(
+    {"offset", "zero", "one", "two", "few", "many", "other"}
+)
 ASCII_WORD_RE = re.compile(r"[A-Za-z]+(?:['’-][A-Za-z]+)*")
 SOURCE_MULTIWORD_NAME_RE = re.compile(
     r"\b[A-Z][A-Za-z0-9+.#-]*(?:\s+[A-Z][A-Za-z0-9+.#-]*){1,4}\b"
@@ -124,6 +127,27 @@ def extract_translatable_html_attributes(match: re.Match[str]) -> str:
     for attribute in TRANSLATABLE_HTML_ATTRIBUTE_RE.finditer(match.group(0)):
         values.append(attribute.group(1) or attribute.group(2) or "")
     return f" {' '.join(values)} "
+
+
+def icu_message_spans(value: str) -> list[tuple[int, int]]:
+    """Return brace-balanced spans of ICU plural/select messages."""
+
+    spans: list[tuple[int, int]] = []
+    for match in ICU_MESSAGE_RE.finditer(value):
+        depth = 0
+        for index in range(match.start(), len(value)):
+            character = value[index]
+            if character == "{":
+                depth += 1
+            elif character == "}":
+                depth -= 1
+                if depth == 0:
+                    spans.append((match.start(), index + 1))
+                    break
+        else:
+            # Unbalanced message: treat the remainder as inside the message.
+            spans.append((match.start(), len(value)))
+    return spans
 
 
 def mask_protected_content(value: str) -> tuple[str, list[dict[str, str]]]:
@@ -152,8 +176,19 @@ def mask_protected_content(value: str) -> tuple[str, list[dict[str, str]]]:
     collect(VERSION_RE, "VERSION_OR_CODE", "syntax")
     collect(MARKDOWN_DESTINATION_RE, "PATH_OR_ADDRESS", "syntax", group=1)
 
+    icu_spans = icu_message_spans(coverage_text)
+
     for match in TOKEN_RE.finditer(coverage_text):
         start, end = match.span(0)
+        if (
+            match.lastgroup == "brace"
+            and end < len(coverage_text)
+            and coverage_text[end] == "}"
+            and any(s <= start and end <= e for s, e in icu_spans)
+        ):
+            # Inside an ICU message body a bare {word} is branch text, not a
+            # placeholder; leave it visible for English-residue detection.
+            continue
         candidates.append(
             (start, end, "RUNTIME_TOKEN", match.group(0), "syntax", "")
         )
@@ -182,12 +217,24 @@ def mask_protected_content(value: str) -> tuple[str, list[dict[str, str]]]:
 
 def extract_tokens(value: str) -> Counter[str]:
     tokens: Counter[str] = Counter()
+    icu_spans = icu_message_spans(value)
     for match in TOKEN_RE.finditer(value):
         kind = match.lastgroup or "token"
         raw = match.group(0)
         if kind == "brace":
             name_match = re.match(r"\{\s*([A-Za-z_][\w.-]*)", raw)
             assert name_match is not None
+            inside_icu = any(
+                s <= match.start() and match.end() <= e for s, e in icu_spans
+            )
+            if (
+                inside_icu
+                and match.end() < len(value)
+                and value[match.end()] == "}"
+            ):
+                # Bare {word} inside an ICU message body is branch text, not
+                # an argument; the message head is compared as icu_arg.
+                continue
             raw = name_match.group(1)
         tokens[f"{kind}:{raw}"] += 1
     exact_patterns = (
@@ -240,6 +287,25 @@ def extract_tokens(value: str) -> Counter[str]:
                 tokens[
                     f"html_attribute:{tag_index}:{name}={attribute_value}"
                 ] += 1
+    if icu_spans:
+        has_plural = False
+        has_fallback = False
+        for match in ICU_MESSAGE_RE.finditer(value):
+            tokens[f"icu_arg:{match.group('arg')}"] += 1
+            tokens[f"icu_selector:{match.group('kind')}"] += 1
+            has_plural = has_plural or match.group("kind") == "plural"
+        for match in ICU_SELECTOR_RE.finditer(value):
+            name = match.group(1)
+            if name == "other":
+                has_fallback = True
+            if name not in ICU_CLDR_KEYWORDS:
+                tokens[f"icu_option:{name}"] += 1
+        if has_plural and "#" in value:
+            # Existence, not count: dropping a locale-irrelevant branch such
+            # as `one` legitimately removes its `#` occurrences.
+            tokens["icu_number_sign"] += 1
+        if has_fallback:
+            tokens["icu_fallback"] += 1
     if "\n" in value:
         tokens["control:newline"] += value.count("\n")
     if "\t" in value:

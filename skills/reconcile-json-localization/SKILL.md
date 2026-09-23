@@ -179,16 +179,16 @@ before deciding that any English span or complete value should remain English.
 
 For every shared string:
 
-4.1 Compare the source and target argument set and protected-token multiset.
+5.1 Compare the source and target argument set and protected-token multiset.
 
-4.2 Preserve token spelling exactly while allowing Chinese word order to
+5.2 Preserve token spelling exactly while allowing Chinese word order to
 change around it.
 
-4.3 Use the project's parser or message compiler when the format has one. The
+5.3 Use the project's parser or message compiler when the format has one. The
 bundled auditor recognizes common token shapes but is not a complete parser for
 every message language.
 
-4.4 A token mismatch is not resolved until the target parses and the runtime
+5.4 A token mismatch is not resolved until the target parses and the runtime
 receives the same arguments and control branches it expects.
 
 ## 6 Reconcile meaning

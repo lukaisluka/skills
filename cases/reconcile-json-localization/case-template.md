@@ -1,6 +1,6 @@
 # JSON localization reconciliation case template
 
-复制本文件为 `case-<序号>-<短名>.md` 后填写。Case 记录真实的英文/中文 locale JSON 对账现场；源文件较大时可以保存最小但完整复现问题的 fixture，并链接原始版本。
+复制本文件为 `case-<序号>-<短名>.md` 后填写，用于**真实使用后回填**的评估 case。合成的确定性回归 seed case（如 `case-001`）不套用本模板，采用 prompt + fixtures + 断言的简化结构。Case 记录真实的英文/中文 locale JSON 对账现场；源文件较大时可以保存最小但完整复现问题的 fixture，并链接原始版本。
 
 ## 元信息
 
@@ -60,7 +60,7 @@
 - [ ] 最终检查确认其余英文自然语言均已翻译
 - [ ] 新增和初始全英文 value 的标点按中文语义决定，而非机械替换
 - [ ] 既有中文译文没有发生无独立理由的 punctuation-only 修改
-- [ ] bundled auditor 退出码为 0
+- [ ] bundled auditor 退出码为 0；若为 3，每个 review path 均已按决策账本分类（保留英文含 reason code），exit 1 或 2 均不通过
 - [ ] 项目自带 validator / tests 通过，或明确记录不可用
 
 ## 实际结果与差异
