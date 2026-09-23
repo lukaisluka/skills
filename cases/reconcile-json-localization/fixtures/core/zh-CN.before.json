@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "signIn": "Sign in with GitHub to continue.",
+    "retry": "Retry",
+    "docs": "阅读文档：https://example.com/guide",
+    "welcome": "欢迎回来。",
+    "obsolete": "旧内容"
+  },
+  "cli": {
+    "install": "运行 `npm install` 以继续。"
+  },
+  "existing": {
+    "stable": "设置已保存。",
+    "mixed": "连接你的 GitHub account",
+    "stale": "永久归档此工作区。"
+  }
+}
