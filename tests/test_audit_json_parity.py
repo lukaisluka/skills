@@ -177,6 +177,30 @@ class AuditJsonParityTest(unittest.TestCase):
         )
         self.assertEqual(finding["fragments"], ["GitHub", "account"])
 
+    def test_residue_fragments_keep_identifier_runs_whole(self) -> None:
+        completed = self.run_audit(
+            json.dumps(
+                {"hint": "Set ACME_API_KEY in your shell profile to use the CLI."}
+            ),
+            json.dumps(
+                {"hint": "在 shell 配置文件中设置 ACME_API_KEY 以使用 CLI。"},
+                ensure_ascii=False,
+            ),
+        )
+
+        self.assertEqual(completed.returncode, 3)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["reviews"]
+            if item["kind"] == "unprotected_english"
+        )
+        self.assertIn("ACME_API_KEY", finding["fragments"])
+        self.assertNotIn("ACME", finding["fragments"])
+        self.assertNotIn("API", finding["fragments"])
+        self.assertIn("shell", finding["fragments"])
+        self.assertIn("CLI", finding["fragments"])
+
     def test_different_all_english_target_requires_semantic_review(self) -> None:
         completed = self.run_audit(
             '{"action": "Please try again"}',
