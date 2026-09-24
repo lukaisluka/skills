@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "name": "core-reconciliation",
+    "prompt": "帮我对账 locales/zh-CN.json 和 locales/en.json，让中文 locale 完全跟随英文源，缺的补、错的改，完成后给我一份对账报告。",
+    "fixtures": "fixtures/core (en.json, zh-CN.before.json copied to locales/)",
+    "expected": "zh-CN.json equals zh-CN.expected.json as a data model with English key order; only zh-CN.json changed; compact change-focused report; GitHub and `npm install` preserved; stale meaning corrected; no sidecar files"
+  },
+  {
+    "id": 2,
+    "name": "message-contracts-and-residue",
+    "prompt": "帮我对账 locales/zh-CN.json 和 locales/en.json，让中文 locale 完全跟随英文源，缺的补、错的改，完成后给我一份对账报告。",
+    "fixtures": "fixtures/contracts (en.json, zh-CN.before.json copied to locales/)",
+    "expected": "missing <strong> restored around the overdue clause; refundWindow copied as number 30; notifications array length and order matched with translations; locale-legal ICU branch reduction (zh drops one/=0) kept, not restored; ACME_API_KEY and Workflows kept as exact protected spans; stale legacy translation replaced; unchanged correct translations not churned; no sidecar files"
+  },
+  {
+    "id": 3,
+    "name": "blocked-invalid-input",
+    "prompt": "帮我对账 locales/zh-CN.json 和 locales/en.json，让中文 locale 完全跟随英文源，缺的补、错的改，完成后给我一份对账报告。",
+    "fixtures": "fixtures/blocked (en.json, zh-CN.before.json copied to locales/; zh file has a duplicate key)",
+    "expected": "status BLOCKED (or equivalent) reporting the duplicate key at its path; no silent winner-picking or guessing; zh-CN.json left unmodified or clearly refused; no fabricated reconciliation claim"
+  }
+]

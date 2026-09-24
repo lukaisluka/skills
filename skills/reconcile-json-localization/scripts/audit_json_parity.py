@@ -106,6 +106,7 @@ ICU_CLDR_KEYWORDS = frozenset(
     {"offset", "zero", "one", "two", "few", "many", "other"}
 )
 ASCII_WORD_RE = re.compile(r"[A-Za-z]+(?:['’-][A-Za-z]+)*")
+IDENTIFIER_RUN_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[_.][A-Za-z0-9]+)+")
 SOURCE_MULTIWORD_NAME_RE = re.compile(
     r"\b[A-Z][A-Za-z0-9+.#-]*(?:\s+[A-Z][A-Za-z0-9+.#-]*){1,4}\b"
 )
@@ -161,8 +162,10 @@ def icu_branch_options(
     """Collect branch option names at the direct child level of ICU messages.
 
     Only words at a branch boundary — right after the message header or after
-    a sibling branch body closes — are options. A body-text word before a
-    nested placeholder (`Error, see {link}`) never qualifies.
+    a sibling branch body closes — are options. Plural exact-match branches
+    (`=0`, `=1`, …) count as options and compare as `icu_option:=N` tokens. A
+    body-text word before a nested placeholder (`Error, see {link}`) never
+    qualifies.
     """
 
     options: list[tuple[str, int, int]] = []
@@ -179,7 +182,9 @@ def icu_branch_options(
                 continue
             if character == "}":
                 break
-            word_match = re.match(r"[A-Za-z_][\w.-]*", value[index:end])
+            word_match = re.match(
+                r"(?:=[+-]?\d+|[A-Za-z_][\w.-]*)", value[index:end]
+            )
             if word_match is None:
                 break
             word_start = index
@@ -489,6 +494,29 @@ def add_finding(
     findings.append(finding)
 
 
+def english_fragments_of(text: str) -> list[str]:
+    """Return English fragments, keeping identifier runs whole.
+
+    Machine identifiers such as ACME_API_KEY or oauth2.client must surface as
+    one fragment so they can be matched against the agent's decision ledger;
+    plain words in the remaining text are reported individually.
+    """
+
+    spans: list[tuple[int, str]] = []
+    occupied = [False] * len(text)
+    for match in IDENTIFIER_RUN_RE.finditer(text):
+        spans.append((match.start(), match.group(0)))
+        for index in range(match.start(), match.end()):
+            occupied[index] = True
+    residue = "".join(
+        character if not occupied[index] else " "
+        for index, character in enumerate(text)
+    )
+    for match in ASCII_WORD_RE.finditer(residue):
+        spans.append((match.start(), match.group(0)))
+    return [fragment for _start, fragment in sorted(spans)]
+
+
 def classify_translation(
     source: str,
     target: str,
@@ -502,7 +530,7 @@ def classify_translation(
         return
 
     remaining, _protected = mask_protected_content(target)
-    english_fragments = ASCII_WORD_RE.findall(remaining)
+    english_fragments = english_fragments_of(remaining)
     has_han = HAN_RE.search(remaining) is not None
     has_other_letters = any(
         character.isalpha()

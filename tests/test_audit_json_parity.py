@@ -177,6 +177,30 @@ class AuditJsonParityTest(unittest.TestCase):
         )
         self.assertEqual(finding["fragments"], ["GitHub", "account"])
 
+    def test_residue_fragments_keep_identifier_runs_whole(self) -> None:
+        completed = self.run_audit(
+            json.dumps(
+                {"hint": "Set ACME_API_KEY in your shell profile to use the CLI."}
+            ),
+            json.dumps(
+                {"hint": "在 shell 配置文件中设置 ACME_API_KEY 以使用 CLI。"},
+                ensure_ascii=False,
+            ),
+        )
+
+        self.assertEqual(completed.returncode, 3)
+        report = json.loads(completed.stdout)
+        finding = next(
+            item
+            for item in report["reviews"]
+            if item["kind"] == "unprotected_english"
+        )
+        self.assertIn("ACME_API_KEY", finding["fragments"])
+        self.assertNotIn("ACME", finding["fragments"])
+        self.assertNotIn("API", finding["fragments"])
+        self.assertIn("shell", finding["fragments"])
+        self.assertIn("CLI", finding["fragments"])
+
     def test_different_all_english_target_requires_semantic_review(self) -> None:
         completed = self.run_audit(
             '{"action": "Please try again"}',
@@ -309,6 +333,57 @@ class AuditJsonParityTest(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stdout)
                 report = json.loads(completed.stdout)
                 self.assertEqual(report["status"], "mechanical_parity")
+
+    def test_plural_exact_branch_gap_reports_missing_not_extra(self) -> None:
+        completed = self.run_audit(
+            json.dumps(
+                {
+                    "items": (
+                        "You have {count, plural, =0 {no items} "
+                        "one {# item} other {# items}} in your cart."
+                    )
+                }
+            ),
+            json.dumps(
+                {"items": "购物车中有 {count, plural, other {# 件商品}}。"},
+                ensure_ascii=False,
+            ),
+        )
+
+        self.assertEqual(completed.returncode, 1)
+        report = json.loads(completed.stdout)
+        mismatch = next(
+            error
+            for error in report["errors"]
+            if error["kind"] == "protected_token_mismatch"
+        )
+        self.assertIn("icu_option:=0", mismatch["missing"])
+        self.assertNotIn("icu_fallback", mismatch["extra"])
+
+    def test_plural_exact_branch_kept_with_locale_reduction_passes(self) -> None:
+        completed = self.run_audit(
+            json.dumps(
+                {
+                    "items": (
+                        "You have {count, plural, =0 {no items} "
+                        "one {# item} other {# items}} in your cart."
+                    )
+                }
+            ),
+            json.dumps(
+                {
+                    "items": (
+                        "购物车中有 {count, plural, =0 {没有商品} "
+                        "other {# 件商品}}。"
+                    )
+                },
+                ensure_ascii=False,
+            ),
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        report = json.loads(completed.stdout)
+        self.assertEqual(report["status"], "mechanical_parity")
 
     def test_untranslated_icu_branch_text_requires_review(self) -> None:
         completed = self.run_audit(
