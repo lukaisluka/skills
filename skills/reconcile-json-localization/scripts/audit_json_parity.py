@@ -161,8 +161,10 @@ def icu_branch_options(
     """Collect branch option names at the direct child level of ICU messages.
 
     Only words at a branch boundary — right after the message header or after
-    a sibling branch body closes — are options. A body-text word before a
-    nested placeholder (`Error, see {link}`) never qualifies.
+    a sibling branch body closes — are options. Plural exact-match branches
+    (`=0`, `=1`, …) count as options and compare as `icu_option:=N` tokens. A
+    body-text word before a nested placeholder (`Error, see {link}`) never
+    qualifies.
     """
 
     options: list[tuple[str, int, int]] = []
@@ -179,7 +181,9 @@ def icu_branch_options(
                 continue
             if character == "}":
                 break
-            word_match = re.match(r"[A-Za-z_][\w.-]*", value[index:end])
+            word_match = re.match(
+                r"(?:=[+-]?\d+|[A-Za-z_][\w.-]*)", value[index:end]
+            )
             if word_match is None:
                 break
             word_start = index
