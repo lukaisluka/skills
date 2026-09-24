@@ -1,0 +1,18 @@
+{
+  "billing": {
+    "invoiceReady": "您的发票 {invoiceId} 已准备好。",
+    "items": "购物车中有 {count, plural, other {# 件商品}}。",
+    "apiKeyHint": "在 shell 配置文件中设置 ACME_API_KEY 以对 CLI 进行身份验证。",
+    "overdue": "您的付款已逾期。请立即付款以避免服务暂停。",
+    "docs": "参见 [计费指南](https://example.com/docs/billing)。",
+    "refundWindow": "30天",
+    "notifications": [
+      "账单已完成。"
+    ]
+  },
+  "errors": {
+    "network": "网络错误，请检查连接后重试。",
+    "legacy": "此功能已被移除。",
+    "promo": "促销活动已结束。"
+  }
+}

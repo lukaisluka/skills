@@ -1,0 +1,15 @@
+{
+  "billing": {
+    "invoiceReady": "Your invoice {invoiceId} is ready.",
+    "items": "You have {count, plural, =0 {no items} one {# item} other {# items}} in your cart.",
+    "apiKeyHint": "Set ACME_API_KEY in your shell profile to authenticate the CLI.",
+    "overdue": "Your payment is <strong>overdue</strong>. Pay now to avoid suspension.",
+    "docs": "See the [billing guide](https://example.com/docs/billing) for details.",
+    "refundWindow": 30,
+    "notifications": ["Billing complete.", "Invoice sent."]
+  },
+  "errors": {
+    "network": "Network error. Check your connection and retry.",
+    "legacy": "This feature has been retired and replaced by Workflows."
+  }
+}
