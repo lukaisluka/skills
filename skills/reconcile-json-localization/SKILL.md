@@ -144,6 +144,14 @@ agent's semantic decision. The script never edits either file. Exit `3` is not
 a failure and not completion by itself: review every reported path against the
 source-first decision ledger.
 
+Exit `2` is a hard stop. Invalid JSON or duplicate keys in either file mean
+the input cannot be validated, so the run must not continue to reconciliation:
+do not repair the broken input inside this run, and do not silently keep one
+of several duplicate values, even when the English source appears to decide
+the winner. Report status `BLOCKED` with the exact validator message and the
+affected path, and let the user resolve the input defect first. A separate
+user request to fix the input file is a different task from reconciliation.
+
 If the script cannot run, reproduce the same checks with available JSON
 capabilities and state that the bundled validation was unavailable.
 
